@@ -5,7 +5,7 @@
 --! @brief object oriented wrapper for curses.
 ----------------------------------------------
 
-c_curses = require("c_curses")
+local c_curses = require("libcurses")
 
 --------------------------------------------------------------------------------
 
@@ -63,13 +63,13 @@ function Screen:refresh()
 end
 
 function Screen:destroy()
-    c_curses.destroy()
+    c_curses.destroy(self.ctx)
 end
 
 --------------------------------------------------------------------------------
 
 local curses = {
-    Screen = Screen
+    Screen = Screen,
     colors = c_curses.colors
 }
 

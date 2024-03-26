@@ -19,7 +19,7 @@ dirs:
 	mkdir -p obj/
 
 obj/libcurses.so: $(OBJ)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LFLAGS) -shared -o $@ $^
+	$(CC) $(CPPFLAGS) $(CFLAGS) -shared -o $@ $^ $(LFLAGS)
 
 obj/libcurses.a: $(OBJ)
 	ar rcs $@ $^

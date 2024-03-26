@@ -5,18 +5,19 @@
 --! @brief simple test script for luacurses
 -------------------------------------------
 
-curses = require("curses")
+local curses = require("curses")
+local colors = curses.colors
 
 local function do_test()
     local screen = curses.Screen()
     screen:setcursor(1, 1)
-    screen:write("Hello, World!", 0, 7)
+    screen:write("Hello, World!", colors.RED, colors.BLACK)
     screen:setcursor(2, 2)
-    screen:write("Name: ", 0, 7)
+    screen:write("Name: ", colors.RED, colors.BLACK)
     screen:refresh()
     local name = screen:readline()
-    screen:setcursor(3,3)
-    screen:write(name, 0, 7)
+    screen:setcursor(3, 3)
+    screen:write(name, colors.RED, colors.BLACK)
     screen:refresh()
     screen:destroy()
 end

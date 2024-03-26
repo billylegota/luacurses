@@ -28,14 +28,14 @@ typedef struct {
 } _color_t;
 
 static const _color_t colors[] = {
-    {"COLOR_BLACK",     COLOR_BLACK},
-    {"COLOR_RED",       COLOR_RED},
-    {"COLOR_GREEN",     COLOR_GREEN},
-    {"COLOR_YELLOW",    COLOR_YELLOW},
-    {"COLOR_BLUE",      COLOR_BLUE},
-    {"COLOR_MAGENTA",   COLOR_MAGENTA},
-    {"COLOR_CYAN",      COLOR_CYAN},
-    {"COLOR_WHITE",     COLOR_WHITE}
+    {"BLACK",     COLOR_BLACK},
+    {"RED",       COLOR_RED},
+    {"GREEN",     COLOR_GREEN},
+    {"YELLOW",    COLOR_YELLOW},
+    {"BLUE",      COLOR_BLUE},
+    {"MAGENTA",   COLOR_MAGENTA},
+    {"CYAN",      COLOR_CYAN},
+    {"WHITE",     COLOR_WHITE}
 };
 
 /**
@@ -212,7 +212,7 @@ int l_destroy(lua_State *L) {
 
 // TODO: Add methods that allow configuring echo and other such properties of
 // the screen.
-static const struct luaL_Reg c_curses[] = {
+static const struct luaL_Reg libcurses[] = {
     {"init",         l_init},
     {"read",         l_read},
     {"readline",     l_readline},
@@ -227,16 +227,19 @@ static const struct luaL_Reg c_curses[] = {
     {NULL, NULL}
 };
 
-int luaopen_c_curses(lua_State *L) {
+int luaopen_libcurses(lua_State *L) {
     // Load the functions.
-    luaL_newlib(L, c_curses);
+    luaL_newlib(L, libcurses);
 
     // Load the color constants.
+    lua_pushstring(L, "colors");
+    lua_newtable(L);
     for(int i = 0; i < NUM_COLORS; i++) {
         lua_pushstring(L, colors[i].name);
         lua_pushinteger(L, colors[i].id);
         lua_settable(L, -3);
     }
+    lua_settable(L, -3);
 
     return 1;
 }
