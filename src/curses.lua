@@ -21,7 +21,7 @@ setmetatable(Screen, {
 })
 
 function Screen:init()
-    self.ctx = c_curses.init();
+    self.ctx = c_curses.init()
 end
 
 function Screen:read(n, blocking)
