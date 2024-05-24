@@ -68,4 +68,4 @@ To contribute, fork the repository, make your changes, and create a pull request
 
 ## License
 
-This project is licensed under the MIT License - see [license.md](license.md) for details.
+This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) for details.
