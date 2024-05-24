@@ -2,32 +2,31 @@
  * @file luacurses.c
  * @author William Blount
  * @date 6/15/2018
- * @brief a simple lua wrapper for ncurses
+ * @brief A simple Lua wrapper for ncurses
  */
 
-#include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
-
-#include <assert.h>
 #include <curses.h>
+#include <lua.h>
+#include <lauxlib.h>
 #include <stdlib.h>
 
+#define SCREEN_CONTEXT_TYPE_METATABLE_NAME "luacurses.ScreenContext"
+#define MAX_READ_LENGTH 1024
 #define MAX_LINE_LENGTH 1024
-#define NUM_COLORS 8
+#define NUM_COLORS (sizeof(colors) / (sizeof(colors[0])))
 
 typedef struct {
     WINDOW *window;
     bool    isColor;
     bool    isActive;
-} _screen_ctx_t;
+} screen_ctx_t;
 
 typedef struct {
     const char *name;
     const short id;
-} _color_t;
+} color_t;
 
-static const _color_t colors[] = {
+static const color_t colors[] = {
     {"BLACK",     COLOR_BLACK},
     {"RED",       COLOR_RED},
     {"GREEN",     COLOR_GREEN},
@@ -40,75 +39,93 @@ static const _color_t colors[] = {
 
 /**
  * Returns the ID of a color pair given the foreground and background colors. If
- * the colorpair has not already been initialized, initializes it. Color pair
+ * the color pair has not already been initialized, initializes it. Color pair
  * IDs are guaranteed to be unique between different fg, bg pairs.
  * @param fg the foreground color. Must be one of the curses COLOR_* values.
  * @param bg the background color. Must be one of the curses COLOR_* values.
  * @return the ID of the color pair.
  */
 static short colors_to_pair(short fg, short bg) {
-    // Calculate the ID from the fg and bg.
-    short id = fg * NUM_COLORS + bg;
-
-    // Initialize the color pair with the given fg and bg.
-    init_pair(id, fg, bg);
-
-    // Return the ID.
-    return id;
+    return (short) (fg * NUM_COLORS + bg);
 }
 
 int l_init(lua_State *L) {
-    _screen_ctx_t *ctx = lua_newuserdata(L, sizeof(*ctx));
+    screen_ctx_t *ctx = lua_newuserdata(L, sizeof(*ctx));
+    luaL_getmetatable(L, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
+    lua_setmetatable(L, -2);
+
     ctx->window = initscr();
     ctx->isColor = has_colors();
     ctx->isActive = true;
 
-    if(ctx->isColor) {
+    if (ctx->isColor) {
         start_color();
+
+        // The number of colors is always representable as a short so this narrowing conversion is safe.
+        for (short fg = 0; fg < (short) NUM_COLORS; fg++) {
+            for (short bg = 0; bg < (short) NUM_COLORS; bg++) {
+                short id = colors_to_pair(fg, bg);
+                init_pair(id, fg, bg);
+            }
+        }
     }
 
     return 1;
 }
 
 int l_read(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
-    int n = luaL_checkinteger(L, 2);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
+    size_t n = luaL_checkinteger(L, 2);
     bool blocking = lua_toboolean(L, 3);
+
+    if (n > MAX_READ_LENGTH) {
+        return luaL_error(L, "Cannot read more than %d characters", MAX_READ_LENGTH);
+    }
 
     nodelay(ctx->window, !blocking);
 
-    char buf[n];
-    for(int i = 0; i < n; i++) {
+    char *buf = malloc(n + 1); // +1 for the null terminator
+    if (!buf) {
+        return luaL_error(L, "Memory allocation error");
+    }
+
+    buf[n] = '\0'; // Handles the case where we run out of buffer space before input.
+    for (size_t i = 0; i < n; i++) {
         int ch = wgetch(ctx->window);
-        if(ch < 0) {
-            buf[n] = 0;
+        // TODO: Implement some more robust logic here to handle special keys etc.
+        if (ch < 0) {
+            buf[i] = '\0';
             break;
         }
-        buf[n] = (char) ch;
+        buf[i] = (char)ch;
     }
+
     lua_pushstring(L, buf);
+    free(buf);
 
     return 1;
 }
 
 int l_readline(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
     bool blocking = lua_toboolean(L, 2);
 
     nodelay(ctx->window, !blocking);
-    char *buf = (char *) calloc(MAX_LINE_LENGTH, sizeof(*buf));
+    char *buf = (char *)calloc(MAX_LINE_LENGTH, sizeof(*buf));
+    if (!buf) {
+        return luaL_error(L, "Memory allocation error");
+    }
+
     wgetstr(ctx->window, buf);
 
     lua_pushstring(L, buf);
+    free(buf);
 
     return 1;
 }
 
 int l_iscolor(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     lua_pushboolean(L, ctx->isColor);
 
@@ -116,8 +133,7 @@ int l_iscolor(lua_State *L) {
 }
 
 int l_isactive(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     lua_pushboolean(L, ctx->isActive);
 
@@ -125,8 +141,7 @@ int l_isactive(lua_State *L) {
 }
 
 int l_getsize(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     int x;
     int y;
@@ -139,8 +154,7 @@ int l_getsize(lua_State *L) {
 }
 
 int l_getcursor(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     int x;
     int y;
@@ -153,26 +167,42 @@ int l_getcursor(lua_State *L) {
 }
 
 int l_setcursor(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
-    int x = luaL_checkinteger(L, 2);
-    int y = luaL_checkinteger(L, 3);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
+    lua_Integer x = luaL_checkinteger(L, 2);
+    lua_Integer y = luaL_checkinteger(L, 3);
 
-    wmove(ctx->window, y, x);
+    if (x < 0 || x >= COLS) {
+        return luaL_error(L, "Column out of range. Expected value in [0, %d) but got %d", COLS, x);
+    }
+
+    if (y < 0 || y >= LINES) {
+        return luaL_error(L, "Row out of range. Expected value in [0, %d) but got %d", LINES, y);
+    }
+
+    // Narrowing conversion is safe as we already checked that `x` and `y` fit in an int.
+    wmove(ctx->window, (int) y, (int) x);
 
     return 0;
 }
 
 int l_write(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     const char *str = luaL_checkstring(L, 2);
 
-    short fg = (short) luaL_checkinteger(L, 3);
-    short bg = (short) luaL_checkinteger(L, 4);
+    lua_Integer fg = luaL_checkinteger(L, 3);
+    lua_Integer bg = luaL_checkinteger(L, 4);
 
-    short id = colors_to_pair(fg, bg);
+    if (fg < 0 || fg >= NUM_COLORS) {
+        return luaL_error(L, "Invalid fg color: %d", fg);
+    }
+
+    if (bg < 0 || bg >= NUM_COLORS) {
+        return luaL_error(L, "Invalid bg color: %d", bg);
+    }
+
+    // Narrowing conversion is safe as we already checked that `fg` and `bg` fit in a short.
+    short id = colors_to_pair((short)fg, (short)bg);
 
     wattron(ctx->window, COLOR_PAIR(id));
     waddstr(ctx->window, str);
@@ -182,8 +212,7 @@ int l_write(lua_State *L) {
 }
 
 int l_clear(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     wclear(ctx->window);
 
@@ -191,8 +220,7 @@ int l_clear(lua_State *L) {
 }
 
 int l_refresh(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     wrefresh(ctx->window);
 
@@ -200,8 +228,7 @@ int l_refresh(lua_State *L) {
 }
 
 int l_destroy(lua_State *L) {
-    assert(lua_isuserdata(L, 1));
-    _screen_ctx_t *ctx = lua_touserdata(L, 1);
+    screen_ctx_t *ctx = luaL_checkudata(L, 1, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
 
     endwin();
 
@@ -217,6 +244,7 @@ static const struct luaL_Reg libcurses[] = {
     {"read",         l_read},
     {"readline",     l_readline},
     {"iscolor",      l_iscolor},
+    {"isactive",     l_isactive},
     {"getsize",      l_getsize},
     {"getcursor",    l_getcursor},
     {"setcursor",    l_setcursor},
@@ -227,14 +255,19 @@ static const struct luaL_Reg libcurses[] = {
     {NULL, NULL}
 };
 
-int luaopen_libcurses(lua_State *L) {
+__attribute__((used)) int luaopen_libcurses(lua_State *L) {
     // Load the functions.
     luaL_newlib(L, libcurses);
+
+    // Register the metatable for the screen context type with a unique name.
+    luaL_newmetatable(L, SCREEN_CONTEXT_TYPE_METATABLE_NAME);
+    lua_pushvalue(L, -1);  // Duplicate the metatable
+    lua_setfield(L, -2, "__index");  // metatable.__index = metatable
 
     // Load the color constants.
     lua_pushstring(L, "colors");
     lua_newtable(L);
-    for(int i = 0; i < NUM_COLORS; i++) {
+    for (size_t i = 0; i < NUM_COLORS; i++) {
         lua_pushstring(L, colors[i].name);
         lua_pushinteger(L, colors[i].id);
         lua_settable(L, -3);
