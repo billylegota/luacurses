@@ -10,13 +10,19 @@ These instructions will get you a copy of luacurses up and running on your local
 
 In order to build luacurses you will need the following:
 - C compiler (GCC is recommended)
-- Make
-- Lua 3.5.2 (or later) and the associated headers
+- Make or CMake
+- Lua 5.4 and the associated headers
 - (N)curses and the associated headers
 
 ### Building
 
-Simply clone or download the repository and run `make linux` from the `src/` directory.
+Simply clone or download the repository and run `make` or make a build directory and build using CMake:
+```shell
+$ mkdir build
+$ cd build
+$ cmake .. 
+$ make
+```
 
 ### Installing
 
